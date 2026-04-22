@@ -56,7 +56,7 @@ def load(watchlist_path: Path | None = None) -> AppConfig:
                 adults=int(w.get("adults", defaults.get("adults", 2))),
                 cabin=w.get("cabin", defaults.get("cabin", "ECONOMY")),
                 currency=w.get("currency", defaults.get("currency", "TWD")),
-                max_price=float(w["max_price_twd"]),
+                max_price=float(w["max_price"]),
                 date_step_days=int(
                     w.get("date_step_days", defaults.get("date_step_days", 3))
                 ),

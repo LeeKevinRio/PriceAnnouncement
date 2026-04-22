@@ -15,10 +15,10 @@ watches:
     destination: KIX       # 關西機場
     depart_window_days: 180     # 從今天起未來 180 天內
     stay_days: [5, 7]      # 停留 5 或 7 天各試一次
-    max_price_twd: 15000   # 兩人來回總價低於這個金額就通知
+    max_price: 15000       # 兩人來回總價低於這個金額就通知（單位由 currency 決定）
 
   - name: 東京
     destination: NRT       # 成田；也可以改 HND 羽田
     depart_window_days: 180
     stay_days: [4, 6]
-    max_price_twd: 16000
+    max_price: 16000
