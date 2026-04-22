@@ -54,20 +54,34 @@ def format_section(watch: Watch, hits: list[FlightQuote]) -> str:
     return "\n".join(lines)
 
 
-def run(cfg: AppConfig) -> None:
+def run(cfg: AppConfig, dry_run: bool = False) -> None:
     client = AmadeusClient(cfg.amadeus_key, cfg.amadeus_secret)
     notifier = TelegramNotifier(cfg.tg_bot_token, cfg.tg_chat_id)
 
     sections: list[str] = []
+    failed: list[str] = []
     for watch in cfg.watches:
-        hits = scan_watch(client, watch)
-        if hits:
-            sections.append(format_section(watch, hits))
+        try:
+            hits = scan_watch(client, watch)
+            if hits:
+                sections.append(format_section(watch, hits))
+        except Exception as exc:
+            print(f"[{watch.name}] scan error: {exc}")
+            failed.append(watch.name)
 
-    if not sections:
+    if not sections and not failed:
         print("no hits below threshold; skipping Telegram notification")
         return
 
-    header = f"機票通知 {date.today().isoformat()}\n\n"
-    notifier.send(header + "\n\n".join(sections))
+    header = f"✈️ 機票通知 {date.today().isoformat()}\n\n"
+    body_parts = sections[:]
+    if failed:
+        body_parts.append(f"⚠️ 掃描失敗: {', '.join(failed)}")
+    body = "\n\n".join(body_parts)
+
+    if dry_run:
+        print("[dry-run] would send:\n" + header + body)
+        return
+
+    notifier.send(header + body)
     print("sent Telegram notification")
