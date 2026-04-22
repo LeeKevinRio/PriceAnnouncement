@@ -1,24 +1,70 @@
 # 機票監控清單
-# 每次排程執行時，會針對下面每一筆 watch 進行掃描。
-# 超過 max_price_twd 的結果會被忽略；低於或等於才會進通知。
+# ─────────────────────────────────────────────
+# 欄位說明：
+#   name              顯示在 Telegram 通知裡的名稱
+#   origin            出發機場 IATA 代碼（預設 TPE）
+#   destination       目的地機場 IATA 代碼
+#   depart_window_days  從今天起往後掃幾天的出發日
+#   stay_days         停留天數清單，每個值都會獨立掃描
+#   adults            乘客人數（預設 2）
+#   cabin             艙等：ECONOMY / PREMIUM_ECONOMY / BUSINESS / FIRST
+#   currency          顯示幣別（預設 TWD）
+#   max_price         低於此金額才觸發通知（單位 = currency）
+#   date_step_days    掃描密度：每隔幾天取一個出發日（越小越精細、API 用量越大）
+# ─────────────────────────────────────────────
 
 defaults:
   origin: TPE              # 出發機場（桃園）
   adults: 2
   cabin: ECONOMY
   currency: TWD
-  # 掃描密度：在 depart_window_days 內每隔幾天取樣一次（值越小越精細、API 用量越大）
-  date_step_days: 3
+  date_step_days: 3        # 每 3 天取樣一次（180 天窗口 ≈ 60 次 API call/watch）
 
 watches:
+  # ── 日本 ──────────────────────────────────
   - name: 大阪
     destination: KIX       # 關西機場
-    depart_window_days: 180     # 從今天起未來 180 天內
-    stay_days: [5, 7]      # 停留 5 或 7 天各試一次
-    max_price: 15000       # 兩人來回總價低於這個金額就通知（單位由 currency 決定）
+    depart_window_days: 180
+    stay_days: [5, 7]
+    max_price: 15000       # TWD，兩人來回總價
 
   - name: 東京
-    destination: NRT       # 成田；也可以改 HND 羽田
+    destination: NRT       # 成田；改 HND 為羽田
     depart_window_days: 180
     stay_days: [4, 6]
     max_price: 16000
+
+  - name: 福岡
+    destination: FUK
+    depart_window_days: 120
+    stay_days: [4, 5]
+    max_price: 13000
+
+  # ── 東南亞 ────────────────────────────────
+  - name: 曼谷
+    destination: BKK       # 素萬那普；改 DMK 為廊曼
+    depart_window_days: 120
+    stay_days: [5, 7]
+    max_price: 12000
+
+  - name: 新加坡
+    destination: SIN
+    depart_window_days: 120
+    stay_days: [4, 6]
+    max_price: 14000
+
+  # ── 韓國 ──────────────────────────────────
+  - name: 首爾
+    destination: ICN       # 仁川
+    depart_window_days: 180
+    stay_days: [4, 5]
+    max_price: 12000
+
+  # ── 歐洲（示範：不同幣別）─────────────────
+  # - name: 倫敦
+  #   destination: LHR
+  #   depart_window_days: 180
+  #   stay_days: [7, 10]
+  #   currency: USD
+  #   max_price: 800         # 低於 800 USD 就通知
+  #   date_step_days: 7      # 歐洲行程通常排得較遠，步長可以大一點
