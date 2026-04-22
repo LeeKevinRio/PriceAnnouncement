@@ -1,0 +1,72 @@
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+from dotenv import load_dotenv
+
+
+@dataclass
+class Watch:
+    name: str
+    origin: str
+    destination: str
+    depart_window_days: int
+    stay_days: list[int]
+    adults: int
+    cabin: str
+    currency: str
+    max_price: float
+    date_step_days: int
+
+
+@dataclass
+class AppConfig:
+    amadeus_key: str
+    amadeus_secret: str
+    tg_bot_token: str
+    tg_chat_id: str
+    watches: list[Watch]
+
+
+def _require_env(key: str) -> str:
+    value = os.environ.get(key)
+    if not value:
+        raise RuntimeError(f"Missing required environment variable: {key}")
+    return value
+
+
+def load(watchlist_path: Path | None = None) -> AppConfig:
+    load_dotenv()
+
+    path = watchlist_path or Path(__file__).resolve().parent.parent / "watchlist.yaml"
+    with open(path, "r", encoding="utf-8") as f:
+        raw = yaml.safe_load(f)
+
+    defaults = raw.get("defaults") or {}
+    watches: list[Watch] = []
+    for w in raw["watches"]:
+        watches.append(
+            Watch(
+                name=w["name"],
+                origin=w.get("origin", defaults.get("origin", "TPE")),
+                destination=w["destination"],
+                depart_window_days=int(w["depart_window_days"]),
+                stay_days=[int(d) for d in w["stay_days"]],
+                adults=int(w.get("adults", defaults.get("adults", 2))),
+                cabin=w.get("cabin", defaults.get("cabin", "ECONOMY")),
+                currency=w.get("currency", defaults.get("currency", "TWD")),
+                max_price=float(w["max_price_twd"]),
+                date_step_days=int(
+                    w.get("date_step_days", defaults.get("date_step_days", 3))
+                ),
+            )
+        )
+
+    return AppConfig(
+        amadeus_key=_require_env("AMADEUS_API_KEY"),
+        amadeus_secret=_require_env("AMADEUS_API_SECRET"),
+        tg_bot_token=_require_env("TELEGRAM_BOT_TOKEN"),
+        tg_chat_id=_require_env("TELEGRAM_CHAT_ID"),
+        watches=watches,
+    )
