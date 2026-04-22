@@ -1,0 +1,24 @@
+# 機票監控清單
+# 每次排程執行時，會針對下面每一筆 watch 進行掃描。
+# 超過 max_price_twd 的結果會被忽略；低於或等於才會進通知。
+
+defaults:
+  origin: TPE              # 出發機場（桃園）
+  adults: 2
+  cabin: ECONOMY
+  currency: TWD
+  # 掃描密度：在 depart_window_days 內每隔幾天取樣一次（值越小越精細、API 用量越大）
+  date_step_days: 3
+
+watches:
+  - name: 大阪
+    destination: KIX       # 關西機場
+    depart_window_days: 180     # 從今天起未來 180 天內
+    stay_days: [5, 7]      # 停留 5 或 7 天各試一次
+    max_price_twd: 15000   # 兩人來回總價低於這個金額就通知
+
+  - name: 東京
+    destination: NRT       # 成田；也可以改 HND 羽田
+    depart_window_days: 180
+    stay_days: [4, 6]
+    max_price_twd: 16000
