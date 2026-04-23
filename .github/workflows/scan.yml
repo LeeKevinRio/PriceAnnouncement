@@ -21,6 +21,17 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # Restore the notification state so we don't re-spam the same hits.
+      # The cache key rotates daily; on miss we fall back to any earlier key.
+      - name: Restore notification state
+        id: state-cache
+        uses: actions/cache@v4
+        with:
+          path: state.json
+          key: flight-state-${{ github.run_id }}
+          restore-keys: |
+            flight-state-
+
       - name: Run scan
         env:
           AMADEUS_API_KEY: ${{ secrets.AMADEUS_API_KEY }}
@@ -28,3 +39,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python -m src.main
+
+      # actions/cache only saves on the exact-key miss above (run_id is unique),
+      # so this always saves the updated state for the next run to restore.
