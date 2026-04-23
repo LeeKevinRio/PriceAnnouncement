@@ -36,7 +36,15 @@ def _require_env(key: str) -> str:
     return value
 
 
-def load(watchlist_path: Path | None = None) -> AppConfig:
+def load(
+    watchlist_path: Path | None = None, require_amadeus: bool = True
+) -> AppConfig:
+    """Load config from watchlist.yaml + env vars.
+
+    Set require_amadeus=False for commands that only talk to Telegram
+    (e.g. --test-notify), so the user can verify Telegram connectivity
+    before they've finished setting up their Amadeus credentials.
+    """
     load_dotenv()
 
     path = watchlist_path or Path(__file__).resolve().parent.parent / "watchlist.yaml"
@@ -63,9 +71,16 @@ def load(watchlist_path: Path | None = None) -> AppConfig:
             )
         )
 
+    if require_amadeus:
+        amadeus_key = _require_env("AMADEUS_API_KEY")
+        amadeus_secret = _require_env("AMADEUS_API_SECRET")
+    else:
+        amadeus_key = os.environ.get("AMADEUS_API_KEY", "")
+        amadeus_secret = os.environ.get("AMADEUS_API_SECRET", "")
+
     return AppConfig(
-        amadeus_key=_require_env("AMADEUS_API_KEY"),
-        amadeus_secret=_require_env("AMADEUS_API_SECRET"),
+        amadeus_key=amadeus_key,
+        amadeus_secret=amadeus_secret,
         tg_bot_token=_require_env("TELEGRAM_BOT_TOKEN"),
         tg_chat_id=_require_env("TELEGRAM_CHAT_ID"),
         watches=watches,

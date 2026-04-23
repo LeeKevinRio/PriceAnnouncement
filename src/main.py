@@ -24,7 +24,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    cfg = load()
+    # --test-notify only needs Telegram credentials; skip the Amadeus check
+    # so users can verify their Telegram setup before finishing Amadeus signup.
+    cfg = load(require_amadeus=not args.test_notify)
 
     if args.test_notify:
         notifier = TelegramNotifier(cfg.tg_bot_token, cfg.tg_chat_id)
