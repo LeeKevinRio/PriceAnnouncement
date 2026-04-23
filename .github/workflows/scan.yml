@@ -21,6 +21,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      - name: Run tests
+        run: python -m unittest discover -s tests
+
       # Restore the notification state so we don't re-spam the same hits.
       # The cache key rotates daily; on miss we fall back to any earlier key.
       - name: Restore notification state
