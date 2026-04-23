@@ -24,6 +24,7 @@ Thumbs.db
 logs/
 *.log
 .cache/
+state.json
 
 # Claude memory (local-only context for Claude Code)
 memory/

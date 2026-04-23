@@ -1,6 +1,7 @@
 import time
 from datetime import date, timedelta
 
+from . import state as state_mod
 from .amadeus_client import AmadeusClient, FlightQuote
 from .config import AppConfig, Watch
 from .telegram_bot import TelegramNotifier
@@ -54,23 +55,51 @@ def format_section(watch: Watch, hits: list[FlightQuote]) -> str:
     return "\n".join(lines)
 
 
+def _filter_new_hits(
+    state: dict, watch: Watch, hits: list[FlightQuote]
+) -> list[FlightQuote]:
+    """Keep only hits that are new or meaningfully cheaper than last notification."""
+    fresh: list[FlightQuote] = []
+    for q in hits:
+        if state_mod.should_notify(
+            state, watch.name, q.depart_date, q.return_date, q.price
+        ):
+            fresh.append(q)
+    return fresh
+
+
 def run(cfg: AppConfig, dry_run: bool = False) -> None:
     client = AmadeusClient(cfg.amadeus_key, cfg.amadeus_secret)
     notifier = TelegramNotifier(cfg.tg_bot_token, cfg.tg_chat_id)
 
+    state = state_mod.load_state()
+    pruned = state_mod.prune_past(state)
+    if pruned:
+        print(f"pruned {pruned} past entries from state")
+
     sections: list[str] = []
     failed: list[str] = []
+    all_hits: list[tuple[Watch, list[FlightQuote]]] = []
+
     for watch in cfg.watches:
         try:
             hits = scan_watch(client, watch)
-            if hits:
-                sections.append(format_section(watch, hits))
+            all_hits.append((watch, hits))
+            fresh = _filter_new_hits(state, watch, hits)
+            if fresh:
+                sections.append(format_section(watch, fresh))
+            suppressed = len(hits) - len(fresh)
+            if suppressed:
+                print(f"[{watch.name}] {suppressed} hit(s) suppressed (already notified)")
         except Exception as exc:
             print(f"[{watch.name}] scan error: {exc}")
             failed.append(watch.name)
 
     if not sections and not failed:
-        print("no hits below threshold; skipping Telegram notification")
+        print("no new hits; skipping Telegram notification")
+        # Still save pruning updates
+        if not dry_run:
+            state_mod.save_state(state)
         return
 
     header = f"✈️ 機票通知 {date.today().isoformat()}\n\n"
@@ -85,3 +114,14 @@ def run(cfg: AppConfig, dry_run: bool = False) -> None:
 
     notifier.send(header + body)
     print("sent Telegram notification")
+
+    # Record all fresh notifications so we don't re-spam next run
+    for watch, hits in all_hits:
+        for q in hits:
+            if state_mod.should_notify(
+                state, watch.name, q.depart_date, q.return_date, q.price
+            ):
+                state_mod.record(
+                    state, watch.name, q.depart_date, q.return_date, q.price
+                )
+    state_mod.save_state(state)
