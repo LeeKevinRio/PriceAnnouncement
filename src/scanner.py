@@ -1,4 +1,3 @@
-import time
 from datetime import date, timedelta
 
 from . import state as state_mod
@@ -7,45 +6,55 @@ from .telegram_bot import TelegramNotifier
 from .travelpayouts_client import FlightQuote, TravelpayoutsClient
 
 
-def _date_pairs(watch: Watch) -> list[tuple[str, str]]:
-    today = date.today()
-    pairs: list[tuple[str, str]] = []
-    for offset in range(1, watch.depart_window_days + 1, watch.date_step_days):
-        depart = today + timedelta(days=offset)
-        for stay in watch.stay_days:
-            ret = depart + timedelta(days=stay)
-            pairs.append((depart.isoformat(), ret.isoformat()))
-    return pairs
-
-
 def scan_watch(
     client: TravelpayoutsClient, watch: Watch, verbose: bool = False
 ) -> list[FlightQuote]:
-    pairs = _date_pairs(watch)
-    print(f"[{watch.name}] scanning {len(pairs)} date combos...")
+    """Fetch recent deals for a watch and filter to hits matching all constraints."""
+    quotes = client.find_deals(
+        origin=watch.origin,
+        destination=watch.destination,
+        adults=watch.adults,
+        currency=watch.currency,
+        verbose=verbose,
+    )
+    print(f"[{watch.name}] got {len(quotes)} cached deals, filtering...")
+
+    today = date.today()
+    max_depart = today + timedelta(days=watch.depart_window_days)
+
     hits: list[FlightQuote] = []
-    for depart, ret in pairs:
-        quote = client.cheapest_roundtrip(
-            origin=watch.origin,
-            destination=watch.destination,
-            depart_date=depart,
-            return_date=ret,
-            adults=watch.adults,
-            cabin=watch.cabin,
-            currency=watch.currency,
-            verbose=verbose,
-        )
-        if quote:
-            under = quote.price <= watch.max_price
-            tag = "HIT " if under else "    "
-            # Always print hits; in verbose mode also print over-threshold quotes
-            if under or verbose:
+    for q in quotes:
+        try:
+            depart = date.fromisoformat(q.depart_date)
+            ret = date.fromisoformat(q.return_date)
+        except ValueError:
+            continue
+
+        duration = (ret - depart).days
+        reasons: list[str] = []
+        if depart < today:
+            reasons.append("depart in past")
+        elif depart > max_depart:
+            reasons.append(f"depart > +{watch.depart_window_days}d")
+        if watch.stay_days and duration not in watch.stay_days:
+            reasons.append(f"stay={duration}d not in {watch.stay_days}")
+        if q.price > watch.max_price:
+            reasons.append(f"price {q.price:,.0f} > {watch.max_price:,.0f}")
+
+        if reasons:
+            if verbose:
                 print(
-                    f"  {tag}{depart} -> {ret}: {quote.currency} {quote.price:,.0f}"
+                    f"      SKIP {q.depart_date}→{q.return_date} ({duration}d) "
+                    f"{q.currency} {q.price:,.0f}: {'; '.join(reasons)}"
                 )
-            if under:
-                hits.append(quote)
-        time.sleep(0.15)
+            continue
+
+        print(
+            f"  HIT {q.depart_date} → {q.return_date} ({duration}d): "
+            f"{q.currency} {q.price:,.0f}"
+        )
+        hits.append(q)
+
     print(f"[{watch.name}] {len(hits)} hits under {watch.currency} {watch.max_price:,.0f}")
     return hits
 
@@ -107,7 +116,6 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
 
     if not sections and not failed:
         print("no new hits; skipping Telegram notification")
-        # Still save pruning updates
         if not dry_run:
             state_mod.save_state(state)
         return
@@ -125,7 +133,6 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
     notifier.send(header + body)
     print("sent Telegram notification")
 
-    # Record all fresh notifications so we don't re-spam next run
     for watch, hits in all_hits:
         for q in hits:
             if state_mod.should_notify(

@@ -1,12 +1,12 @@
 """Travelpayouts (Aviasales) flight price API client.
 
-Replaces the Amadeus client. Uses Travelpayouts' cached-prices endpoint
-which is free after signup, no per-call quota for reasonable traffic.
+Uses the `/aviasales/v3/get_latest_prices` endpoint which returns the
+recent cached cheap deals for a route. We then filter client-side by
+date range / stay duration / price threshold.
 
-Endpoint: https://api.travelpayouts.com/aviasales/v3/prices_for_dates
-
-Note: Travelpayouts serves cached prices, so obscure dates may return
-empty — that's normal, the scanner just skips those combos.
+This trades exact-date matching (prices_for_dates) for better cache
+coverage — crucial for low-volume origin airports like TPE where
+per-date cache entries are often empty.
 """
 
 from dataclasses import dataclass
@@ -34,43 +34,41 @@ class TravelpayoutsClient:
         self._session = requests.Session()
         self._session.headers["X-Access-Token"] = api_token
 
-    def cheapest_roundtrip(
+    def find_deals(
         self,
         origin: str,
         destination: str,
-        depart_date: str,
-        return_date: str,
         adults: int,
-        cabin: str,  # noqa: ARG002 — kept for API compat with Amadeus client
         currency: str = "TWD",
+        period_type: str = "year",
+        limit: int = 1000,
         verbose: bool = False,
-    ) -> FlightQuote | None:
-        """Return the cheapest cached roundtrip quote, or None if not available.
+    ) -> list[FlightQuote]:
+        """Fetch all recent cached roundtrip deals for a route.
 
-        The returned price is multiplied by `adults` so it matches the Amadeus
-        client's semantics (grand total for all passengers), keeping existing
-        max_price thresholds in watchlist.yaml valid.
+        Travelpayouts returns per-person prices; we multiply by `adults`
+        so callers see grand totals (matching the existing max_price
+        semantics in watchlist.yaml).
 
-        With verbose=True, prints the reason whenever None is returned so we
-        can distinguish "no cache for this date" from "API error / bad token".
+        Returns [] on error or when the cache has no data for this route.
         """
         params = {
             "origin": origin,
             "destination": destination,
-            "departure_at": depart_date,
-            "return_at": return_date,
             "currency": currency.lower(),
-            "limit": 1,
-            "sorting": "price",
-            "direct": "false",
+            "period_type": period_type,
             "one_way": "false",
+            "page": 1,
+            "limit": limit,
+            "show_to_affiliates": "true",
+            "sorting": "price",
         }
         if self._marker:
             params["marker"] = self._marker
 
         try:
             r = self._session.get(
-                f"{self._BASE}/aviasales/v3/prices_for_dates",
+                f"{self._BASE}/aviasales/v3/get_latest_prices",
                 params=params,
                 timeout=self._TIMEOUT,
             )
@@ -78,30 +76,40 @@ class TravelpayoutsClient:
             data = r.json()
         except requests.RequestException as exc:
             if verbose:
-                print(f"    API ERROR {depart_date}->{return_date}: {exc}")
-            return None
+                print(f"    API ERROR {origin}->{destination}: {exc}")
+            return []
 
-        if not data.get("success"):
+        if not data.get("success", True):
             if verbose:
-                print(f"    API NOT-OK {depart_date}->{return_date}: {data}")
-            return None
+                print(f"    API NOT-OK {origin}->{destination}: {data}")
+            return []
 
         offers = data.get("data") or []
-        if not offers:
-            if verbose:
-                print(f"    NO CACHE  {depart_date}->{return_date}")
-            return None
+        if not offers and verbose:
+            print(f"    NO DEALS in Travelpayouts cache for {origin}->{destination}")
 
-        offer = offers[0]
-        per_person = float(offer["price"])
-        airline = offer.get("airline")
+        quotes: list[FlightQuote] = []
+        for offer in offers:
+            depart = offer.get("depart_date") or offer.get("departure_at")
+            ret = offer.get("return_date") or offer.get("return_at")
+            # Different response shapes use different field names
+            per_person = offer.get("value") or offer.get("price")
+            if not (depart and ret and per_person):
+                continue
+            # Normalize ISO timestamp to date only
+            depart = str(depart)[:10]
+            ret = str(ret)[:10]
+            airline = offer.get("gate") or offer.get("airline")
+            quotes.append(
+                FlightQuote(
+                    origin=origin,
+                    destination=destination,
+                    depart_date=depart,
+                    return_date=ret,
+                    price=float(per_person) * adults,
+                    currency=currency,
+                    airlines=[airline] if airline else [],
+                )
+            )
 
-        return FlightQuote(
-            origin=origin,
-            destination=destination,
-            depart_date=depart_date,
-            return_date=return_date,
-            price=per_person * adults,
-            currency=currency,
-            airlines=[airline] if airline else [],
-        )
+        return quotes
