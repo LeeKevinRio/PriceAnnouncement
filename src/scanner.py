@@ -2,9 +2,9 @@ import time
 from datetime import date, timedelta
 
 from . import state as state_mod
-from .amadeus_client import AmadeusClient, FlightQuote
 from .config import AppConfig, Watch
 from .telegram_bot import TelegramNotifier
+from .travelpayouts_client import FlightQuote, TravelpayoutsClient
 
 
 def _date_pairs(watch: Watch) -> list[tuple[str, str]]:
@@ -18,7 +18,7 @@ def _date_pairs(watch: Watch) -> list[tuple[str, str]]:
     return pairs
 
 
-def scan_watch(client: AmadeusClient, watch: Watch) -> list[FlightQuote]:
+def scan_watch(client: TravelpayoutsClient, watch: Watch) -> list[FlightQuote]:
     pairs = _date_pairs(watch)
     print(f"[{watch.name}] scanning {len(pairs)} date combos...")
     hits: list[FlightQuote] = []
@@ -69,7 +69,7 @@ def _filter_new_hits(
 
 
 def run(cfg: AppConfig, dry_run: bool = False) -> None:
-    client = AmadeusClient(cfg.amadeus_key, cfg.amadeus_secret)
+    client = TravelpayoutsClient(cfg.travelpayouts_token, cfg.travelpayouts_marker)
     notifier = TelegramNotifier(cfg.tg_bot_token, cfg.tg_chat_id)
 
     state = state_mod.load_state()

@@ -22,8 +22,8 @@ class Watch:
 
 @dataclass
 class AppConfig:
-    amadeus_key: str
-    amadeus_secret: str
+    travelpayouts_token: str
+    travelpayouts_marker: str
     tg_bot_token: str
     tg_chat_id: str
     watches: list[Watch]
@@ -37,13 +37,13 @@ def _require_env(key: str) -> str:
 
 
 def load(
-    watchlist_path: Path | None = None, require_amadeus: bool = True
+    watchlist_path: Path | None = None, require_flights_api: bool = True
 ) -> AppConfig:
     """Load config from watchlist.yaml + env vars.
 
-    Set require_amadeus=False for commands that only talk to Telegram
+    Set require_flights_api=False for commands that only talk to Telegram
     (e.g. --test-notify), so the user can verify Telegram connectivity
-    before they've finished setting up their Amadeus credentials.
+    before they've finished setting up their Travelpayouts credentials.
     """
     load_dotenv()
 
@@ -71,16 +71,16 @@ def load(
             )
         )
 
-    if require_amadeus:
-        amadeus_key = _require_env("AMADEUS_API_KEY")
-        amadeus_secret = _require_env("AMADEUS_API_SECRET")
+    if require_flights_api:
+        tp_token = _require_env("TRAVELPAYOUTS_TOKEN")
     else:
-        amadeus_key = os.environ.get("AMADEUS_API_KEY", "")
-        amadeus_secret = os.environ.get("AMADEUS_API_SECRET", "")
+        tp_token = os.environ.get("TRAVELPAYOUTS_TOKEN", "")
+    # Marker is optional; Travelpayouts only needs it for attribution
+    tp_marker = os.environ.get("TRAVELPAYOUTS_MARKER", "")
 
     return AppConfig(
-        amadeus_key=amadeus_key,
-        amadeus_secret=amadeus_secret,
+        travelpayouts_token=tp_token,
+        travelpayouts_marker=tp_marker,
         tg_bot_token=_require_env("TELEGRAM_BOT_TOKEN"),
         tg_chat_id=_require_env("TELEGRAM_CHAT_ID"),
         watches=watches,
