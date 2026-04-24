@@ -18,7 +18,9 @@ def _date_pairs(watch: Watch) -> list[tuple[str, str]]:
     return pairs
 
 
-def scan_watch(client: TravelpayoutsClient, watch: Watch) -> list[FlightQuote]:
+def scan_watch(
+    client: TravelpayoutsClient, watch: Watch, verbose: bool = False
+) -> list[FlightQuote]:
     pairs = _date_pairs(watch)
     print(f"[{watch.name}] scanning {len(pairs)} date combos...")
     hits: list[FlightQuote] = []
@@ -31,10 +33,18 @@ def scan_watch(client: TravelpayoutsClient, watch: Watch) -> list[FlightQuote]:
             adults=watch.adults,
             cabin=watch.cabin,
             currency=watch.currency,
+            verbose=verbose,
         )
-        if quote and quote.price <= watch.max_price:
-            hits.append(quote)
-            print(f"  HIT {depart} -> {ret}: {quote.currency} {quote.price:,.0f}")
+        if quote:
+            under = quote.price <= watch.max_price
+            tag = "HIT " if under else "    "
+            # Always print hits; in verbose mode also print over-threshold quotes
+            if under or verbose:
+                print(
+                    f"  {tag}{depart} -> {ret}: {quote.currency} {quote.price:,.0f}"
+                )
+            if under:
+                hits.append(quote)
         time.sleep(0.15)
     print(f"[{watch.name}] {len(hits)} hits under {watch.currency} {watch.max_price:,.0f}")
     return hits
@@ -68,7 +78,7 @@ def _filter_new_hits(
     return fresh
 
 
-def run(cfg: AppConfig, dry_run: bool = False) -> None:
+def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
     client = TravelpayoutsClient(cfg.travelpayouts_token, cfg.travelpayouts_marker)
     notifier = TelegramNotifier(cfg.tg_bot_token, cfg.tg_chat_id)
 
@@ -83,7 +93,7 @@ def run(cfg: AppConfig, dry_run: bool = False) -> None:
 
     for watch in cfg.watches:
         try:
-            hits = scan_watch(client, watch)
+            hits = scan_watch(client, watch, verbose=verbose)
             all_hits.append((watch, hits))
             fresh = _filter_new_hits(state, watch, hits)
             if fresh:

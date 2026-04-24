@@ -22,6 +22,12 @@ def main() -> None:
         metavar="NAME",
         help="只掃描 watchlist.yaml 中指定名稱的 watch（例如 --watch 大阪）",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="印出每個日期組合的查詢結果（除錯用：看 API 是否有回資料）",
+    )
     args = parser.parse_args()
 
     # --test-notify only needs Telegram credentials; skip the flights-API check
@@ -40,7 +46,7 @@ def main() -> None:
             print(f"找不到 watch '{args.watch}'，請確認 watchlist.yaml 中的 name 欄位")
             return
 
-    run(cfg, dry_run=args.dry_run)
+    run(cfg, dry_run=args.dry_run, verbose=args.verbose)
 
 
 if __name__ == "__main__":
