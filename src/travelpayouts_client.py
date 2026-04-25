@@ -22,7 +22,8 @@ class FlightQuote:
     return_date: str
     price: float
     currency: str
-    airlines: list[str]
+    airlines: list[str]  # IATA codes (e.g. ["CI"]) — used for filtering
+    gate: str = ""  # booking platform (e.g. "Vayama") — display only
 
 
 class TravelpayoutsClient:
@@ -99,7 +100,8 @@ class TravelpayoutsClient:
             # Normalize ISO timestamp to date only
             depart = str(depart)[:10]
             ret = str(ret)[:10]
-            airline = offer.get("gate") or offer.get("airline")
+            airline = offer.get("airline")  # IATA code for filtering
+            gate = offer.get("gate") or ""  # OTA name for display
             quotes.append(
                 FlightQuote(
                     origin=origin,
@@ -108,7 +110,8 @@ class TravelpayoutsClient:
                     return_date=ret,
                     price=float(per_person) * adults,
                     currency=currency,
-                    airlines=[airline] if airline else [],
+                    airlines=[str(airline).upper()] if airline else [],
+                    gate=str(gate),
                 )
             )
 

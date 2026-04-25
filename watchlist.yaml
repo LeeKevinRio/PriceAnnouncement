@@ -5,66 +5,86 @@
 #   origin            出發機場 IATA 代碼（預設 TPE）
 #   destination       目的地機場 IATA 代碼
 #   depart_window_days  從今天起往後掃幾天的出發日
-#   stay_days         停留天數清單，每個值都會獨立掃描
+#   stay_days         停留天數清單，每個值都會獨立掃；空陣列 [] = 任意天數
 #   adults            乘客人數（預設 2）
 #   cabin             艙等：ECONOMY / PREMIUM_ECONOMY / BUSINESS / FIRST
+#                     （目前 Travelpayouts Data API 不支援艙等過濾，保留欄位）
 #   currency          顯示幣別（預設 TWD）
-#   max_price         低於此金額才觸發通知（單位 = currency）
-#   date_step_days    掃描密度：每隔幾天取一個出發日（越小越精細、API 用量越大）
+#   max_price         低於此金額才觸發通知（單位 = currency；含所有乘客）
+#   airlines_allow    （可選）只接受這些航空公司，例如 [CI, BR, JX]
+#   airlines_block    （可選）排除這些航空公司，例如 [LJ]
+#                     兩者都用 IATA 2 字代碼；都填 = 同時通過才算
 # ─────────────────────────────────────────────
+#
+# 常用航空公司 IATA 代碼：
+#   CI 中華航空    BR 長榮       JX 星宇       AE 華信
+#   JL 日本航空    NH 全日空     CX 國泰       KA 港龍
+#   OZ 韓亞        KE 大韓       LJ 真航空(LCC) 7C 濟州航空(LCC)
+#   TR 酷航(LCC)   IT 台灣虎航(LCC)  D7 亞航X(LCC)  JQ 捷星(LCC)
 
 defaults:
-  origin: TPE              # 出發機場（桃園）
+  origin: TPE
   adults: 2
   cabin: ECONOMY
   currency: TWD
-  date_step_days: 3        # 每 3 天取樣一次（180 天窗口 ≈ 60 次 API call/watch）
+  date_step_days: 3
+  # 全域黑名單範例：所有航線都不要 LCC 廉航
+  # airlines_block: [LJ, 7C, TR, IT, D7, JQ]
 
 watches:
   # ── 日本 ──────────────────────────────────
   - name: 大阪
-    destination: KIX       # 關西機場
+    destination: KIX
     depart_window_days: 180
-    stay_days: [5, 7]
-    max_price: 15000       # TWD，兩人來回總價
+    stay_days: [4, 5, 6, 7, 8]   # 放寬到 4–8 天，cache 命中率高很多
+    max_price: 15000
 
   - name: 東京
-    destination: NRT       # 成田；改 HND 為羽田
+    destination: NRT
     depart_window_days: 180
-    stay_days: [4, 6]
+    stay_days: [4, 5, 6, 7]
     max_price: 16000
+    # 範例：只接受傳統航空，不要廉航
+    # airlines_allow: [CI, BR, JX, JL, NH]
 
   - name: 福岡
     destination: FUK
     depart_window_days: 120
-    stay_days: [4, 5]
+    stay_days: [3, 4, 5, 6]
     max_price: 13000
 
   # ── 東南亞 ────────────────────────────────
   - name: 曼谷
-    destination: BKK       # 素萬那普；改 DMK 為廊曼
+    destination: BKK
     depart_window_days: 120
-    stay_days: [5, 7]
+    stay_days: [4, 5, 6, 7]
     max_price: 12000
 
   - name: 新加坡
     destination: SIN
     depart_window_days: 120
-    stay_days: [4, 6]
+    stay_days: [4, 5, 6]
     max_price: 14000
 
   # ── 韓國 ──────────────────────────────────
   - name: 首爾
-    destination: ICN       # 仁川
+    destination: ICN
     depart_window_days: 180
-    stay_days: [4, 5]
+    stay_days: [4, 5, 6]
     max_price: 12000
 
-  # ── 歐洲（示範：不同幣別）─────────────────
-  # - name: 倫敦
+  # ── 完整篩選範例（註解中，要用就解開）─────
+  # - name: 東京_只看星宇
+  #   destination: NRT
+  #   depart_window_days: 180
+  #   stay_days: [5, 6, 7]
+  #   max_price: 18000
+  #   airlines_allow: [JX]
+  #
+  # - name: 倫敦_用美元
   #   destination: LHR
   #   depart_window_days: 180
-  #   stay_days: [7, 10]
+  #   stay_days: [7, 10, 14]
   #   currency: USD
-  #   max_price: 800         # 低於 800 USD 就通知
-  #   date_step_days: 7      # 歐洲行程通常排得較遠，步長可以大一點
+  #   max_price: 800
+  #   airlines_block: [BA]   # 拒絕 British Airways

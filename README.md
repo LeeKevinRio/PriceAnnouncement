@@ -50,12 +50,27 @@ Repo → Settings → Secrets and variables → Actions → New repository secre
 | `origin` | 出發機場 IATA 代碼（可省略，預設吃 defaults.origin） |
 | `destination` | 目的地 IATA 代碼 |
 | `depart_window_days` | 從今天起往後掃幾天的出發日 |
-| `stay_days` | 停留天數清單，每個值都會獨立掃 |
+| `stay_days` | 停留天數清單；每個值都會獨立掃；`[]` = 任意天數 |
 | `max_price` | 低於此金額才通知（**含所有乘客**；單位 = `currency`） |
 | `currency` | 幣別，預設 TWD |
 | `cabin` | 艙等（目前 Travelpayouts Data API 不支援艙等過濾，保留欄位是為了未來擴充） |
 | `adults` | 乘客人數，預設 2 |
-| `date_step_days` | 掃描密度：每隔幾天取樣一次（越小越精細、查詢次數越多） |
+| `airlines_allow` | （可選）IATA 白名單，例如 `[CI, BR, JX]` |
+| `airlines_block` | （可選）IATA 黑名單，例如 `[LJ, 7C]` |
+| `date_step_days` | 已棄用（v3 改成單次抓取後 client-side 過濾，保留以維持舊 yaml 相容） |
+
+### 航空公司 IATA 代碼速查
+
+| 傳統航空 | IATA | 廉航 (LCC) | IATA |
+|---|---|---|---|
+| 中華航空 | CI | 台灣虎航 | IT |
+| 長榮航空 | BR | 真航空 | LJ |
+| 星宇航空 | JX | 濟州航空 | 7C |
+| 日本航空 | JL | 酷航 | TR |
+| 全日空 | NH | 亞洲航空 X | D7 |
+| 國泰航空 | CX | 捷星 | JQ |
+| 大韓航空 | KE | 香草航空 | JW |
+| 韓亞航空 | OZ | 樂桃航空 | MM |
 
 ## 本地測試
 

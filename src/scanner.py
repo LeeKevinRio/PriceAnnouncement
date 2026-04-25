@@ -40,6 +40,16 @@ def scan_watch(
             reasons.append(f"stay={duration}d not in {watch.stay_days}")
         if q.price > watch.max_price:
             reasons.append(f"price {q.price:,.0f} > {watch.max_price:,.0f}")
+        if watch.airlines_allow and not any(
+            a in watch.airlines_allow for a in q.airlines
+        ):
+            reasons.append(
+                f"airline {q.airlines or '?'} not in allow {watch.airlines_allow}"
+            )
+        if watch.airlines_block and any(
+            a in watch.airlines_block for a in q.airlines
+        ):
+            reasons.append(f"airline {q.airlines} in block list")
 
         if reasons:
             if verbose:
@@ -66,10 +76,15 @@ def format_section(watch: Watch, hits: list[FlightQuote]) -> str:
         "",
     ]
     for q in sorted(hits, key=lambda x: x.price):
-        airlines = "/".join(q.airlines) if q.airlines else "—"
+        meta_parts: list[str] = []
+        if q.airlines:
+            meta_parts.append("/".join(q.airlines))
+        if q.gate:
+            meta_parts.append(f"via {q.gate}")
+        meta = " ".join(meta_parts) if meta_parts else "—"
         lines.append(
             f"• {q.depart_date} → {q.return_date}  "
-            f"<b>{q.currency} {q.price:,.0f}</b>  ({airlines})"
+            f"<b>{q.currency} {q.price:,.0f}</b>  ({meta})"
         )
     return "\n".join(lines)
 

@@ -1,5 +1,5 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -18,6 +18,8 @@ class Watch:
     currency: str
     max_price: float
     date_step_days: int
+    airlines_allow: list[str] = field(default_factory=list)
+    airlines_block: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -68,6 +70,18 @@ def load(
                 date_step_days=int(
                     w.get("date_step_days", defaults.get("date_step_days", 3))
                 ),
+                airlines_allow=[
+                    str(a).upper()
+                    for a in (w.get("airlines_allow")
+                              or defaults.get("airlines_allow")
+                              or [])
+                ],
+                airlines_block=[
+                    str(a).upper()
+                    for a in (w.get("airlines_block")
+                              or defaults.get("airlines_block")
+                              or [])
+                ],
             )
         )
 
