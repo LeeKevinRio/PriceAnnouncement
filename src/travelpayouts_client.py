@@ -20,10 +20,12 @@ class FlightQuote:
     destination: str
     depart_date: str
     return_date: str
-    price: float
+    price: float  # total for `adults` passengers (price_per_person × adults)
+    price_per_person: float  # raw per-passenger price from Travelpayouts
     currency: str
     airlines: list[str]  # IATA codes (e.g. ["CI"]) — used for filtering
     gate: str = ""  # booking platform (e.g. "Vayama") — display only
+    found_at: str = ""  # when Travelpayouts last saw this deal (ISO timestamp)
 
 
 class TravelpayoutsClient:
@@ -102,16 +104,20 @@ class TravelpayoutsClient:
             ret = str(ret)[:10]
             airline = offer.get("airline")  # IATA code for filtering
             gate = offer.get("gate") or ""  # OTA name for display
+            found_at = offer.get("found_at") or ""
+            pp = float(per_person)
             quotes.append(
                 FlightQuote(
                     origin=origin,
                     destination=destination,
                     depart_date=depart,
                     return_date=ret,
-                    price=float(per_person) * adults,
+                    price=pp * adults,
+                    price_per_person=pp,
                     currency=currency,
                     airlines=[str(airline).upper()] if airline else [],
                     gate=str(gate),
+                    found_at=str(found_at)[:10],
                 )
             )
 

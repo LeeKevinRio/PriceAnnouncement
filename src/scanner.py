@@ -59,10 +59,15 @@ def scan_watch(
                 )
             continue
 
-        print(
-            f"  HIT {q.depart_date} → {q.return_date} ({duration}d): "
-            f"{q.currency} {q.price:,.0f}"
-        )
+        if watch.adults > 1:
+            price_str = (
+                f"{q.currency} {q.price_per_person:,.0f}/人 "
+                f"(×{watch.adults}={q.price:,.0f})"
+            )
+        else:
+            price_str = f"{q.currency} {q.price:,.0f}"
+        seen = f" [seen {q.found_at}]" if q.found_at else ""
+        print(f"  HIT {q.depart_date} → {q.return_date} ({duration}d): {price_str}{seen}")
         hits.append(q)
 
     print(f"[{watch.name}] {len(hits)} hits under {watch.currency} {watch.max_price:,.0f}")
@@ -82,9 +87,17 @@ def format_section(watch: Watch, hits: list[FlightQuote]) -> str:
         if q.gate:
             meta_parts.append(f"via {q.gate}")
         meta = " ".join(meta_parts) if meta_parts else "—"
+
+        if watch.adults > 1:
+            price_html = (
+                f"<b>{q.currency} {q.price_per_person:,.0f}/人</b> "
+                f"({watch.adults}人 {q.price:,.0f})"
+            )
+        else:
+            price_html = f"<b>{q.currency} {q.price:,.0f}</b>"
+        seen = f" <i>[cache: {q.found_at}]</i>" if q.found_at else ""
         lines.append(
-            f"• {q.depart_date} → {q.return_date}  "
-            f"<b>{q.currency} {q.price:,.0f}</b>  ({meta})"
+            f"• {q.depart_date} → {q.return_date}  {price_html}  ({meta}){seen}"
         )
     return "\n".join(lines)
 

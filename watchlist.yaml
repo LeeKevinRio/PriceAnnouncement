@@ -10,7 +10,9 @@
 #   cabin             艙等：ECONOMY / PREMIUM_ECONOMY / BUSINESS / FIRST
 #                     （目前 Travelpayouts Data API 不支援艙等過濾，保留欄位）
 #   currency          顯示幣別（預設 TWD）
-#   max_price         低於此金額才觸發通知（單位 = currency；含所有乘客）
+#   max_price         低於此金額才觸發通知（單位 = currency；
+#                     ⚠️ 是「全部乘客的總價」，不是每人，例如 adults=2 時
+#                     門檻 15000 表示兩人來回總和不超過 15000）
 #   airlines_allow    （可選）只接受這些航空公司，例如 [CI, BR, JX]
 #   airlines_block    （可選）排除這些航空公司，例如 [LJ]
 #                     兩者都用 IATA 2 字代碼；都填 = 同時通過才算
