@@ -1,0 +1,70 @@
+name: Telegram bot poll
+
+on:
+  schedule:
+    # 每 5 分鐘輪詢一次 Telegram getUpdates
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+# 只允許一個 bot-poll 同時執行，避免兩次輪詢搶著改 watchlist.yaml
+concurrency:
+  group: bot-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 用 PAT 才有權 push 回 main
+          token: ${{ secrets.GIT_PUSH_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 持久化 last update_id，避免每次重新處理同一批訊息
+      - name: Restore bot state
+        uses: actions/cache@v4
+        with:
+          path: bot_state.json
+          key: bot-state-${{ github.run_id }}
+          restore-keys: |
+            bot-state-
+
+      - name: Process Telegram commands
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python -m src.bot
+
+      - name: Commit watchlist changes (if any)
+        run: |
+          if git diff --quiet watchlist.yaml; then
+            echo "no watchlist changes"
+            exit 0
+          fi
+          git config user.name "Flight Bot"
+          git config user.email "flight-bot@users.noreply.github.com"
+          git add watchlist.yaml
+          git commit -m "bot: update watchlist via Telegram"
+          git push
+
+      - name: Trigger immediate scan if /scan was requested
+        if: hashFiles('.scan_requested') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GIT_PUSH_TOKEN }}
+        run: |
+          rm -f .scan_requested
+          curl -sS -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/scan.yml/dispatches" \
+            -d '{"ref":"main"}'
+          echo "scan workflow dispatched"

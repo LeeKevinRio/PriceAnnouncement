@@ -15,6 +15,8 @@ watchlist.yaml ──▶ scanner.py ──▶ Travelpayouts API
 - 通知：Telegram Bot（一次掃描 → 一則彙整訊息；超過 4096 字會自動切段）
 - 去重：state.json 記錄已通知的低價票，只有新發現或再跌 ≥ 5% 才會重傳
 - 失敗隔離：單一航線掃描失敗不會影響其他航線
+- 7 天價格趨勢：每筆通知附 ↑↓% + 迷你火花圖（▆▅▄▃▂）
+- TG Bot 指令：用 `/add`、`/remove`、`/setprice` 等指令直接調整監控（每 5 分鐘輪詢）
 
 ## 初次設定
 
@@ -120,20 +122,54 @@ python -m unittest discover -s tests -v
 | 香港 | HKG |
 | 倫敦（希斯洛） | LHR |
 
+## Telegram bot 指令（取代手動編輯 yaml）
+
+設好 `GIT_PUSH_TOKEN` secret（見下）後，你可以直接在 Telegram 跟 bot 對話：
+
+```
+/list                                            列出所有監控
+/add name=首爾 dest=ICN price=12000 stays=4,5,6  新增（最少 name/dest/price）
+/add name=首爾 ... airlines=CI,BR direct=yes      可加航空白名單、限直飛
+/remove 大阪                                      移除
+/setprice 大阪 18000                              改門檻
+/setairlines 大阪 CI,BR,JX                       設航空白名單（none = 清空）
+/setdirect 大阪 on                                只看直飛
+/scan                                             立刻觸發一次掃描（不等 12h）
+/help                                             指令列表
+```
+
+每 5 分鐘輪詢一次 → bot 改 `watchlist.yaml` → push 回 main → 下次掃描用新設定。
+
+### 額外需要的 secret：`GIT_PUSH_TOKEN`
+
+bot 要把 yaml 改動 push 回 repo，需要一個 fine-grained PAT：
+
+1. https://github.com/settings/personal-access-tokens/new
+2. **Repository access**: Only select repositories → 選 `PriceAnnouncement`
+3. **Repository permissions**:
+   - Contents: **Read and write**
+   - Actions: **Read and write**（讓 `/scan` 能觸發掃描 workflow）
+4. 產生 token → 複製
+5. Repo → Settings → Secrets → 新增 `GIT_PUSH_TOKEN`，貼上
+
 ## 專案結構
 
 ```
 src/
 ├── config.py               # 讀 watchlist.yaml + 環境變數
-├── travelpayouts_client.py # Travelpayouts Data API 薄封裝
-├── scanner.py              # 遍歷日期組合、過濾低價、per-watch 錯誤隔離、去重
+├── travelpayouts_client.py # Travelpayouts Data API 薄封裝（含直飛過濾）
+├── scanner.py              # 過濾低價、per-watch 錯誤隔離、去重、趨勢
 ├── state.py                # 通知狀態持久化（避免重複推播）
-├── telegram_bot.py         # Telegram 通知（自動切割 >4096 字元訊息）
+├── history.py              # 7 天滾動價格紀錄 + 趨勢/火花圖
+├── telegram_bot.py         # Telegram 推播（自動切割 >4096 字元訊息）
+├── bot.py                  # Telegram 指令處理（修改 watchlist.yaml）
 └── main.py                 # CLI 入口
 
 tests/
 ├── test_state.py           # 去重 / 過期清理 / JSON roundtrip
-└── test_telegram.py        # 訊息切割邊界案例
+├── test_history.py         # 趨勢計算 / 火花圖 / 過期清理
+├── test_telegram.py        # 訊息切割邊界案例
+└── test_bot.py             # 指令解析 + watchlist 修改
 ```
 
 ## 常見問題排查
