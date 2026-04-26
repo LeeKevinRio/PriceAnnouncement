@@ -16,6 +16,7 @@
 #   airlines_allow    （可選）只接受這些航空公司，例如 [CI, BR, JX]
 #   airlines_block    （可選）排除這些航空公司，例如 [LJ]
 #                     兩者都用 IATA 2 字代碼；都填 = 同時通過才算
+#   direct_only       （可選）true = 只接受直飛；省略或 false = 不限
 # ─────────────────────────────────────────────
 #
 # 常用航空公司 IATA 代碼：
@@ -40,6 +41,7 @@ watches:
     depart_window_days: 180
     stay_days: [4, 5, 6, 7, 8]   # 放寬到 4–8 天，cache 命中率高很多
     max_price: 15000
+    # direct_only: true   # 解開這行 = 只看直飛
 
   - name: 東京
     destination: NRT

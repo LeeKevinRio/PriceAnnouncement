@@ -20,6 +20,7 @@ class Watch:
     date_step_days: int
     airlines_allow: list[str] = field(default_factory=list)
     airlines_block: list[str] = field(default_factory=list)
+    direct_only: bool = False
 
 
 @dataclass
@@ -82,6 +83,9 @@ def load(
                               or defaults.get("airlines_block")
                               or [])
                 ],
+                direct_only=bool(
+                    w.get("direct_only", defaults.get("direct_only", False))
+                ),
             )
         )
 

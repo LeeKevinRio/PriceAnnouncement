@@ -26,6 +26,7 @@ class FlightQuote:
     airlines: list[str]  # IATA codes (e.g. ["CI"]) — used for filtering
     gate: str = ""  # booking platform (e.g. "Vayama") — display only
     found_at: str = ""  # when Travelpayouts last saw this deal (ISO timestamp)
+    transfers: int = 0  # 0 = direct (one-way leg), >0 = transit stops
 
 
 class TravelpayoutsClient:
@@ -45,6 +46,7 @@ class TravelpayoutsClient:
         currency: str = "TWD",
         period_type: str = "year",
         limit: int = 1000,
+        direct_only: bool = False,
         verbose: bool = False,
     ) -> list[FlightQuote]:
         """Fetch all recent cached roundtrip deals for a route.
@@ -61,6 +63,7 @@ class TravelpayoutsClient:
             "currency": currency.lower(),
             "period_type": period_type,
             "one_way": "false",
+            "direct": "true" if direct_only else "false",
             "page": 1,
             "limit": limit,
             "show_to_affiliates": "true",
@@ -105,6 +108,7 @@ class TravelpayoutsClient:
             airline = offer.get("airline")  # IATA code for filtering
             gate = offer.get("gate") or ""  # OTA name for display
             found_at = offer.get("found_at") or ""
+            transfers = int(offer.get("number_of_changes") or 0)
             pp = float(per_person)
             quotes.append(
                 FlightQuote(
@@ -118,6 +122,7 @@ class TravelpayoutsClient:
                     airlines=[str(airline).upper()] if airline else [],
                     gate=str(gate),
                     found_at=str(found_at)[:10],
+                    transfers=transfers,
                 )
             )
 

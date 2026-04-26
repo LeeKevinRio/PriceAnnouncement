@@ -16,6 +16,7 @@ def scan_watch(
         destination=watch.destination,
         adults=watch.adults,
         currency=watch.currency,
+        direct_only=watch.direct_only,
         verbose=verbose,
     )
     print(f"[{watch.name}] got {len(quotes)} cached deals, filtering...")
@@ -87,6 +88,10 @@ def format_section(
         meta_parts: list[str] = []
         if q.airlines:
             meta_parts.append("/".join(q.airlines))
+        if q.transfers == 0:
+            meta_parts.append("直飛")
+        else:
+            meta_parts.append(f"{q.transfers}轉")
         if q.gate:
             meta_parts.append(f"via {q.gate}")
         meta = " ".join(meta_parts) if meta_parts else "—"
