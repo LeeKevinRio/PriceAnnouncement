@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from . import history as history_mod
 from . import state as state_mod
 from .config import AppConfig, Watch
 from .telegram_bot import TelegramNotifier
@@ -74,7 +75,9 @@ def scan_watch(
     return hits
 
 
-def format_section(watch: Watch, hits: list[FlightQuote]) -> str:
+def format_section(
+    watch: Watch, hits: list[FlightQuote], history: dict | None = None
+) -> str:
     lines = [
         f"<b>{watch.name} ({watch.origin}→{watch.destination})</b>",
         f"門檻 {watch.currency} {watch.max_price:,.0f} | {watch.adults}人 {watch.cabin}",
@@ -95,9 +98,19 @@ def format_section(watch: Watch, hits: list[FlightQuote]) -> str:
             )
         else:
             price_html = f"<b>{q.currency} {q.price:,.0f}</b>"
+
+        # 7-day trend (only shown when we have ≥2 samples in the window)
+        trend_str = ""
+        if history is not None:
+            t = history_mod.trend(history, watch.name, q.depart_date, q.return_date)
+            if t:
+                trend_str = (
+                    f"  <i>{t['arrow']}{abs(t['change_pct']):.0f}% 7d {t['spark']}</i>"
+                )
+
         seen = f" <i>[cache: {q.found_at}]</i>" if q.found_at else ""
         lines.append(
-            f"• {q.depart_date} → {q.return_date}  {price_html}  ({meta}){seen}"
+            f"• {q.depart_date} → {q.return_date}  {price_html}{trend_str}  ({meta}){seen}"
         )
     return "\n".join(lines)
 
@@ -124,6 +137,11 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
     if pruned:
         print(f"pruned {pruned} past entries from state")
 
+    history = history_mod.load_history()
+    h_pruned = history_mod.prune(history)
+    if h_pruned:
+        print(f"pruned {h_pruned} stale samples from history")
+
     sections: list[str] = []
     failed: list[str] = []
     all_hits: list[tuple[Watch, list[FlightQuote]]] = []
@@ -132,9 +150,18 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
         try:
             hits = scan_watch(client, watch, verbose=verbose)
             all_hits.append((watch, hits))
+
+            # Record every hit's per-person price into history (regardless of
+            # dedup), so the trend chart reflects all observations not just
+            # what we ended up notifying about.
+            for q in hits:
+                history_mod.record(
+                    history, watch.name, q.depart_date, q.return_date, q.price_per_person
+                )
+
             fresh = _filter_new_hits(state, watch, hits)
             if fresh:
-                sections.append(format_section(watch, fresh))
+                sections.append(format_section(watch, fresh, history=history))
             suppressed = len(hits) - len(fresh)
             if suppressed:
                 print(f"[{watch.name}] {suppressed} hit(s) suppressed (already notified)")
@@ -146,6 +173,7 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
         print("no new hits; skipping Telegram notification")
         if not dry_run:
             state_mod.save_state(state)
+            history_mod.save_history(history)
         return
 
     header = f"✈️ 機票通知 {date.today().isoformat()}\n\n"
@@ -170,3 +198,4 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
                     state, watch.name, q.depart_date, q.return_date, q.price
                 )
     state_mod.save_state(state)
+    history_mod.save_history(history)

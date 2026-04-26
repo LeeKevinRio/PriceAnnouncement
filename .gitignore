@@ -25,6 +25,8 @@ logs/
 *.log
 .cache/
 state.json
+history.json
+bot_state.json
 
 # Claude memory (local-only context for Claude Code)
 memory/

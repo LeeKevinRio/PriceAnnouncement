@@ -24,8 +24,8 @@ jobs:
       - name: Run tests
         run: python -m unittest discover -s tests
 
-      # Restore the notification state so we don't re-spam the same hits.
-      # The cache key rotates daily; on miss we fall back to any earlier key.
+      # Restore the notification state so we don't re-spam the same hits,
+      # and the price history so 7-day trend lines have data to draw on.
       - name: Restore notification state
         id: state-cache
         uses: actions/cache@v4
@@ -34,6 +34,15 @@ jobs:
           key: flight-state-${{ github.run_id }}
           restore-keys: |
             flight-state-
+
+      - name: Restore price history
+        id: history-cache
+        uses: actions/cache@v4
+        with:
+          path: history.json
+          key: flight-history-${{ github.run_id }}
+          restore-keys: |
+            flight-history-
 
       - name: Run scan
         env:
