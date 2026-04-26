@@ -144,6 +144,11 @@ def _help() -> str:
     )
 
 
+_REPO_BLOB_URL = (
+    "https://github.com/LeeKevinRio/PriceAnnouncement/blob/main/watchlist.yaml"
+)
+
+
 def _list() -> str:
     data = _read_watchlist()
     watches = data.get("watches") or []
@@ -165,6 +170,8 @@ def _list() -> str:
         if w.get("direct_only"):
             bits.append("direct")
         lines.append(" ".join(bits))
+    lines.append("")
+    lines.append(f'<i>即時版本：<a href="{_REPO_BLOB_URL}">點這裡看 GitHub 上的 watchlist.yaml</a></i>')
     return "\n".join(lines)
 
 
