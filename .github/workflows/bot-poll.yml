@@ -14,7 +14,12 @@ concurrency:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The bot.py main loop long-polls Telegram for ~50 minutes per run so chat
+    # commands respond in 30-60s instead of waiting on the next cron tick
+    # (which under GitHub Actions load lag is typically 30-80 min away, not
+    # the 5 min the cron schedule implies). 55 leaves headroom for the loop's
+    # internal deadline + final commit/push step.
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
         with:
