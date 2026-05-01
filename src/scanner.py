@@ -133,6 +133,55 @@ def _filter_new_hits(
     return fresh
 
 
+def format_summary(
+    cfg: AppConfig,
+    all_hits: list[tuple[Watch, list[FlightQuote]]],
+    failed: list[str],
+) -> str:
+    """One-line-per-watch summary of cheapest current hit, listed for *every*
+    watch in the config — independent of dedup state. Sent every scan so the
+    user sees full coverage of all routes even when individual prices haven't
+    crossed the 5% re-notify threshold; the detailed change-only sections
+    (sent below) still rely on dedup."""
+    by_name = {w.name: hits for w, hits in all_hits}
+    failed_set = set(failed)
+    lines = ["📊 <b>當前最低價（全部 watches）</b>"]
+
+    for watch in cfg.watches:
+        prefix = f"• <b>{watch.name}</b> ({watch.origin}→{watch.destination})"
+        if watch.name in failed_set:
+            lines.append(f"{prefix}  ⚠️ <i>掃描失敗</i>")
+            continue
+        hits = by_name.get(watch.name, [])
+        if not hits:
+            lines.append(
+                f"{prefix}  — <i>無低於 {watch.currency} {watch.max_price:,.0f} 的 hit</i>"
+            )
+            continue
+        cheapest = min(hits, key=lambda q: q.price)
+        try:
+            duration = (
+                date.fromisoformat(cheapest.return_date)
+                - date.fromisoformat(cheapest.depart_date)
+            ).days
+            duration_str = f" ({duration}天)"
+        except ValueError:
+            duration_str = ""
+        if watch.adults > 1:
+            price_str = (
+                f"{watch.currency} {cheapest.price_per_person:,.0f}/人"
+                f" (×{watch.adults}={cheapest.price:,.0f})"
+            )
+        else:
+            price_str = f"{watch.currency} {cheapest.price:,.0f}"
+        lines.append(
+            f"{prefix}  <b>{price_str}</b>  "
+            f"{cheapest.depart_date}→{cheapest.return_date}{duration_str}"
+        )
+
+    return "\n".join(lines)
+
+
 def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
     client = TravelpayoutsClient(cfg.travelpayouts_token, cfg.travelpayouts_marker)
     notifier = TelegramNotifier(cfg.tg_bot_token, cfg.tg_chat_id)
@@ -174,17 +223,27 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
             print(f"[{watch.name}] scan error: {exc}")
             failed.append(watch.name)
 
-    if not sections and not failed:
-        print("no new hits; skipping Telegram notification")
+    has_any_hits = any(hits for _, hits in all_hits)
+
+    # Skip only when truly nothing to report (no hits AND no failures across
+    # all watches). Anything else gets a notification with the always-present
+    # summary at the top.
+    if not has_any_hits and not failed:
+        print("no hits anywhere; skipping Telegram notification")
         if not dry_run:
             state_mod.save_state(state)
             history_mod.save_history(history)
         return
 
     header = f"✈️ 機票通知 {date.today().isoformat()}\n\n"
-    body_parts = sections[:]
-    if failed:
-        body_parts.append(f"⚠️ 掃描失敗: {', '.join(failed)}")
+    summary = format_summary(cfg, all_hits, failed)
+
+    body_parts: list[str] = [summary]
+    if sections:
+        body_parts.append(
+            "🔻 <b>新降價 / 首次出現（已過 5% dedup）</b>\n\n"
+            + "\n\n".join(sections)
+        )
     body = "\n\n".join(body_parts)
 
     if dry_run:
