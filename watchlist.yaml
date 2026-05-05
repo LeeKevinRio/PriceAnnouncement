@@ -35,26 +35,96 @@ defaults:
   # airlines_block: [LJ, 7C, TR, IT, D7, JQ]
 
 watches:
-  # ── 日本 ──────────────────────────────────
-  - name: 大阪
-    destination: KIX
+  # ── 日本：北海道 ──────────────────────────
+  - name: 札幌
+    destination: CTS
     depart_window_days: 180
-    stay_days: [4, 5, 6, 7, 8]   # 放寬到 4–8 天，cache 命中率高很多
-    max_price: 15000
-    # direct_only: true   # 解開這行 = 只看直飛
+    stay_days: [4, 5, 6, 7, 8]
+    max_price: 17000
 
+  - name: 函館
+    destination: HKD
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7, 8]
+    max_price: 18000
+
+  # ── 日本：東北 ────────────────────────────
+  - name: 青森
+    destination: AOJ
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7, 8]
+    max_price: 19000
+
+  - name: 仙台
+    destination: SDJ
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7, 8]
+    max_price: 17000
+
+  # ── 日本：東京 ────────────────────────────
   - name: 東京
     destination: NRT
     depart_window_days: 180
     stay_days: [4, 5, 6, 7]
     max_price: 16000
-    # 範例：只接受傳統航空，不要廉航
-    # airlines_allow: [CI, BR, JX, JL, NH]
 
+  # ── 日本：中部 ────────────────────────────
+  - name: 大阪
+    destination: KIX
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7, 8]
+    max_price: 15000
+
+  - name: 名古屋
+    destination: NGO
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7]
+    max_price: 14000
+
+  - name: 金澤
+    destination: KMQ
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7, 8]
+    max_price: 18000
+
+  # ── 日本：西部 ────────────────────────────
   - name: 福岡
     destination: FUK
     depart_window_days: 120
     stay_days: [3, 4, 5, 6]
+    max_price: 13000
+
+  # ── 日本：四國（高松為主要對外門戶）─────────
+  - name: 高松
+    destination: TAK
+    depart_window_days: 180
+    stay_days: [4, 5, 6, 7]
+    max_price: 17000
+
+  # ── 日本：沖繩 ────────────────────────────
+  - name: 沖繩
+    destination: OKA
+    depart_window_days: 120
+    stay_days: [3, 4, 5, 6]
+    max_price: 13000
+
+  # ── 韓國 ──────────────────────────────────
+  - name: 首爾
+    destination: ICN
+    depart_window_days: 180
+    stay_days: [4, 5, 6]
+    max_price: 12000
+
+  - name: 釜山
+    destination: PUS
+    depart_window_days: 180
+    stay_days: [4, 5, 6]
+    max_price: 11000
+
+  - name: 濟州島
+    destination: CJU
+    depart_window_days: 180
+    stay_days: [4, 5, 6]
     max_price: 13000
 
   # ── 東南亞 ────────────────────────────────
@@ -64,31 +134,20 @@ watches:
     stay_days: [4, 5, 6, 7]
     max_price: 12000
 
-  - name: 新加坡
-    destination: SIN
+  - name: 清邁
+    destination: CNX
     depart_window_days: 120
-    stay_days: [4, 5, 6]
+    stay_days: [4, 5, 6, 7]
     max_price: 14000
 
-  # ── 韓國 ──────────────────────────────────
-  - name: 首爾
-    destination: ICN
-    depart_window_days: 180
-    stay_days: [4, 5, 6]
+  - name: 富國島
+    destination: PQC
+    depart_window_days: 120
+    stay_days: [4, 5, 6, 7]
     max_price: 12000
 
-  # ── 完整篩選範例（註解中，要用就解開）─────
-  # - name: 東京_只看星宇
-  #   destination: NRT
-  #   depart_window_days: 180
-  #   stay_days: [5, 6, 7]
-  #   max_price: 18000
-  #   airlines_allow: [JX]
-  #
-  # - name: 倫敦_用美元
-  #   destination: LHR
-  #   depart_window_days: 180
-  #   stay_days: [7, 10, 14]
-  #   currency: USD
-  #   max_price: 800
-  #   airlines_block: [BA]   # 拒絕 British Airways
+  - name: 河內
+    destination: HAN
+    depart_window_days: 120
+    stay_days: [4, 5, 6, 7]
+    max_price: 11000
