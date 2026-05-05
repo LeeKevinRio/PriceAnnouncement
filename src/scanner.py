@@ -110,75 +110,90 @@ def scan_watch(
     return hits
 
 
-def format_section(
+def _format_quote_line(
     watch: Watch,
-    hits: list[FlightQuote],
-    history: dict | None = None,
-    marker: str = "",
-    prev_prices: dict[tuple[str, str], float] | None = None,
+    q: FlightQuote,
+    history: dict | None,
+    marker: str,
+    kind: str = "",
+    prev_price: float | None = None,
 ) -> str:
-    """Render one watch's hits as an HTML block.
+    """One line for a single quote. `kind` is the leading marker (🆕 / 🔻 / "")."""
+    meta_parts: list[str] = []
+    if q.airlines:
+        meta_parts.append("/".join(q.airlines))
+    if q.transfers == 0:
+        meta_parts.append("直飛")
+    else:
+        meta_parts.append(f"{q.transfers}轉")
+    if q.gate:
+        meta_parts.append(f"via {q.gate}")
+    meta = " ".join(meta_parts) if meta_parts else "—"
 
-    `prev_prices` (depart→return → previous price) — when supplied, each quote
-    that has an entry gets a ⬇️ "降價 from X" annotation. Used for the 🔻 section.
+    if watch.adults > 1:
+        price_html = (
+            f"<b>{q.currency} {q.price_per_person:,.0f}/人</b> "
+            f"({watch.adults}人 {q.price:,.0f})"
+        )
+    else:
+        price_html = f"<b>{q.currency} {q.price:,.0f}</b>"
+
+    drop_str = ""
+    if prev_price is not None and prev_price > q.price:
+        drop_pct = (prev_price - q.price) / prev_price * 100
+        drop_str = (
+            f"  <i>⬇️ 從 {watch.currency} {prev_price:,.0f} 降 {drop_pct:.0f}%</i>"
+        )
+
+    # 7-day trend (only shown when we have ≥2 samples in the window)
+    trend_str = ""
+    if history is not None:
+        t = history_mod.trend(history, watch.name, q.depart_date, q.return_date)
+        if t:
+            trend_str = (
+                f"  <i>{t['arrow']}{abs(t['change_pct']):.0f}% 7d {t['spark']}</i>"
+            )
+
+    # Departure times are best-effort: API only returns them sometimes,
+    # and only for the depart-side of each leg (no arrival/landing).
+    dep_t = _extract_time(q.depart_at)
+    ret_t = _extract_time(q.return_at)
+    dep_str = f"{q.depart_date} {dep_t}" if dep_t else q.depart_date
+    ret_str = f"{q.return_date} {ret_t}" if ret_t else q.return_date
+
+    url = _booking_url(q, watch.adults, marker)
+    link_html = f"  <a href=\"{url}\">訂票</a>" if url else ""
+
+    seen = f" <i>[cache: {q.found_at}]</i>" if q.found_at else ""
+    bullet = f"{kind} " if kind else "• "
+    return (
+        f"{bullet}{dep_str} → {ret_str}  {price_html}"
+        f"{drop_str}{trend_str}  ({meta}){link_html}{seen}"
+    )
+
+
+def _format_watch_block(
+    watch: Watch,
+    entries: list[tuple[str, FlightQuote, float | None]],
+    history: dict | None,
+    marker: str,
+) -> str:
+    """Render one watch's *changed* hits (mixed 🆕 / 🔻), ordered by depart date.
+
+    `entries` items are (kind, quote, prev_price_or_None). Sorting by date keeps
+    flights with similar travel windows visually adjacent — important because
+    these prices are NOT directly comparable across different (depart, return)
+    pairs.
     """
     lines = [
         f"<b>{watch.name} ({watch.origin}→{watch.destination})</b>",
         f"門檻 {watch.currency} {watch.max_price:,.0f} | {watch.adults}人 {watch.cabin}",
         "",
     ]
-    for q in sorted(hits, key=lambda x: x.price):
-        meta_parts: list[str] = []
-        if q.airlines:
-            meta_parts.append("/".join(q.airlines))
-        if q.transfers == 0:
-            meta_parts.append("直飛")
-        else:
-            meta_parts.append(f"{q.transfers}轉")
-        if q.gate:
-            meta_parts.append(f"via {q.gate}")
-        meta = " ".join(meta_parts) if meta_parts else "—"
-
-        if watch.adults > 1:
-            price_html = (
-                f"<b>{q.currency} {q.price_per_person:,.0f}/人</b> "
-                f"({watch.adults}人 {q.price:,.0f})"
-            )
-        else:
-            price_html = f"<b>{q.currency} {q.price:,.0f}</b>"
-
-        drop_str = ""
-        if prev_prices is not None:
-            prev = prev_prices.get((q.depart_date, q.return_date))
-            if prev is not None and prev > q.price:
-                drop_pct = (prev - q.price) / prev * 100
-                drop_str = (
-                    f"  <i>⬇️ 從 {watch.currency} {prev:,.0f} 降 {drop_pct:.0f}%</i>"
-                )
-
-        # 7-day trend (only shown when we have ≥2 samples in the window)
-        trend_str = ""
-        if history is not None:
-            t = history_mod.trend(history, watch.name, q.depart_date, q.return_date)
-            if t:
-                trend_str = (
-                    f"  <i>{t['arrow']}{abs(t['change_pct']):.0f}% 7d {t['spark']}</i>"
-                )
-
-        # Departure times are best-effort: API only returns them sometimes,
-        # and only for the depart-side of each leg (no arrival/landing).
-        dep_t = _extract_time(q.depart_at)
-        ret_t = _extract_time(q.return_at)
-        dep_str = f"{q.depart_date} {dep_t}" if dep_t else q.depart_date
-        ret_str = f"{q.return_date} {ret_t}" if ret_t else q.return_date
-
-        url = _booking_url(q, watch.adults, marker)
-        link_html = f"  <a href=\"{url}\">訂票</a>" if url else ""
-
-        seen = f" <i>[cache: {q.found_at}]</i>" if q.found_at else ""
+    entries_sorted = sorted(entries, key=lambda e: (e[1].depart_date, e[1].return_date))
+    for kind, q, prev in entries_sorted:
         lines.append(
-            f"• {dep_str} → {ret_str}  {price_html}"
-            f"{drop_str}{trend_str}  ({meta}){link_html}{seen}"
+            _format_quote_line(watch, q, history, marker, kind=kind, prev_price=prev)
         )
     return "\n".join(lines)
 
@@ -314,32 +329,25 @@ def _format_changes(
     history: dict,
     marker: str,
 ) -> list[str]:
-    """Build the body sections for the message. Empty buckets are skipped."""
+    """Build the body sections for the message. Empty buckets are skipped.
+
+    Groups changed hits by watch (region) so 🆕 and 🔻 lines for the same
+    destination appear adjacent — avoids the "🆕 7,174 vs 🔻 7,284" confusion
+    where they look comparable but are actually different (depart, return) pairs.
+    """
     parts: list[str] = []
 
-    if new_hits:
-        grouped: dict[str, tuple[Watch, list[FlightQuote]]] = {}
-        for w, q in new_hits:
-            grouped.setdefault(w.name, (w, []))[1].append(q)
-        sub = ["🆕 <b>新增特價</b>"]
-        for w, hs in grouped.values():
-            sub.append(format_section(w, hs, history=history, marker=marker))
-        parts.append("\n\n".join(sub))
+    by_watch: dict[
+        str, tuple[Watch, list[tuple[str, FlightQuote, float | None]]]
+    ] = {}
+    for w, q in new_hits:
+        by_watch.setdefault(w.name, (w, []))[1].append(("🆕", q, None))
+    for w, q, prev in drop_hits:
+        by_watch.setdefault(w.name, (w, []))[1].append(("🔻", q, prev))
 
-    if drop_hits:
-        grouped_d: dict[str, tuple[Watch, list[FlightQuote], dict]] = {}
-        for w, q, prev in drop_hits:
-            entry = grouped_d.setdefault(w.name, (w, [], {}))
-            entry[1].append(q)
-            entry[2][(q.depart_date, q.return_date)] = prev
-        sub = ["🔻 <b>再降價</b>"]
-        for w, hs, prev_map in grouped_d.values():
-            sub.append(
-                format_section(
-                    w, hs, history=history, marker=marker, prev_prices=prev_map
-                )
-            )
-        parts.append("\n\n".join(sub))
+    for watch_name in sorted(by_watch):
+        w, entries = by_watch[watch_name]
+        parts.append(_format_watch_block(w, entries, history, marker))
 
     if gone:
         parts.append(_format_gone_section(gone))
