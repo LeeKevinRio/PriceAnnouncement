@@ -27,6 +27,12 @@ class FlightQuote:
     gate: str = ""  # booking platform (e.g. "Vayama") — display only
     found_at: str = ""  # when Travelpayouts last saw this deal (ISO timestamp)
     transfers: int = 0  # 0 = direct (one-way leg), >0 = transit stops
+    # Outbound and return *departure* timestamps as returned by the API.
+    # Travelpayouts' get_latest_prices does not include arrival times, so
+    # we surface depart-side only. May be just a date (YYYY-MM-DD) when the
+    # response lacks a time component.
+    depart_at: str = ""
+    return_at: str = ""
 
 
 class TravelpayoutsClient:
@@ -96,15 +102,17 @@ class TravelpayoutsClient:
 
         quotes: list[FlightQuote] = []
         for offer in offers:
-            depart = offer.get("depart_date") or offer.get("departure_at")
-            ret = offer.get("return_date") or offer.get("return_at")
+            depart_raw = offer.get("depart_date") or offer.get("departure_at")
+            ret_raw = offer.get("return_date") or offer.get("return_at")
             # Different response shapes use different field names
             per_person = offer.get("value") or offer.get("price")
-            if not (depart and ret and per_person):
+            if not (depart_raw and ret_raw and per_person):
                 continue
-            # Normalize ISO timestamp to date only
-            depart = str(depart)[:10]
-            ret = str(ret)[:10]
+            depart_raw = str(depart_raw)
+            ret_raw = str(ret_raw)
+            # Normalize ISO timestamp to date only for filtering/dedup keys
+            depart = depart_raw[:10]
+            ret = ret_raw[:10]
             airline = offer.get("airline")  # IATA code for filtering
             gate = offer.get("gate") or ""  # OTA name for display
             found_at = offer.get("found_at") or ""
@@ -123,6 +131,8 @@ class TravelpayoutsClient:
                     gate=str(gate),
                     found_at=str(found_at)[:10],
                     transfers=transfers,
+                    depart_at=depart_raw,
+                    return_at=ret_raw,
                 )
             )
 
