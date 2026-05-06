@@ -214,17 +214,22 @@ def _classify(
     list[tuple[Watch, FlightQuote]],
     list[tuple[Watch, FlightQuote, float]],
     list[_GoneEntry],
+    list[tuple[Watch, FlightQuote]],
 ]:
-    """Compare current hits against state. Returns (new, drop, gone).
+    """Compare current hits against state. Returns (new, drop, gone, unchanged).
 
-    - new:  hits whose (watch, depart, return) wasn't in state
-    - drop: hits in state where current price ≤ state.price * (1 - DROP_THRESHOLD)
-    - gone: state entries (depart still in future) that are absent from current hits.
-            Only considers watches still present in the current scan — entries for
-            removed watches are ignored so a deleted watch doesn't haunt notifications.
+    - new:       hits whose (watch, depart, return) wasn't in state
+    - drop:      hits in state where current price ≤ state.price * (1 - DROP_THRESHOLD)
+    - gone:      state entries (depart still in future) that are absent from current hits.
+                 Only considers watches still present in the current scan — entries for
+                 removed watches are ignored so a deleted watch doesn't haunt notifications.
+    - unchanged: hits already in state with no meaningful drop. Surfaced separately so
+                 the "🟢 有特價" header count matches what the body shows, instead of
+                 listing watches whose prices didn't move enough to retrigger detail.
     """
     new_hits: list[tuple[Watch, FlightQuote]] = []
     drop_hits: list[tuple[Watch, FlightQuote, float]] = []
+    unchanged_hits: list[tuple[Watch, FlightQuote]] = []
     seen_keys: set[str] = set()
     watch_currency: dict[str, str] = {}
 
@@ -238,6 +243,8 @@ def _classify(
                 new_hits.append((watch, q))
             elif q.price <= prev["price"] * (1 - state_mod.DROP_THRESHOLD):
                 drop_hits.append((watch, q, float(prev["price"])))
+            else:
+                unchanged_hits.append((watch, q))
 
     today = date.today()
     gone: list[_GoneEntry] = []
@@ -265,7 +272,7 @@ def _classify(
                 currency=watch_currency[watch_name],
             )
         )
-    return new_hits, drop_hits, gone
+    return new_hits, drop_hits, gone, unchanged_hits
 
 
 def _build_header(
@@ -275,6 +282,7 @@ def _build_header(
     new_hits: list[tuple[Watch, FlightQuote]],
     drop_hits: list[tuple[Watch, FlightQuote, float]],
     gone: list[_GoneEntry],
+    unchanged_hits: list[tuple[Watch, FlightQuote]],
 ) -> str:
     """Top-of-message status block: full watch list + per-region status icons."""
     by_name = {w.name: hs for w, hs in all_hits}
@@ -295,6 +303,7 @@ def _build_header(
         (
             f"🎯 監控 {len(cfg.watches)} 地區｜符合 {len(matched_names)}"
             f"｜🆕{len(new_hits)} 🔻{len(drop_hits)} 💤{len(gone)}"
+            f" 📊{len(unchanged_hits)}"
         ),
         "",
     ]
@@ -304,6 +313,34 @@ def _build_header(
         lines.append("🔴 <b>無特價</b>: " + " ".join(empty_names))
     if failed:
         lines.append("⚠️ <b>掃描失敗</b>: " + " ".join(failed))
+    return "\n".join(lines)
+
+
+def _format_unchanged_section(
+    unchanged: list[tuple[Watch, FlightQuote]],
+) -> str:
+    """One compact line per watch listing the cheapest *unchanged* hit + count.
+
+    "Unchanged" = already in state, current price didn't drop ≥ DROP_THRESHOLD.
+    Repeating full per-flight details for these would be the same spam the dedup
+    is meant to suppress, so just surface the cheapest standing price so the
+    header's "🟢 有特價" count is reconciled with what's visible in the body.
+    """
+    by_watch: dict[str, tuple[Watch, list[FlightQuote]]] = {}
+    for w, q in unchanged:
+        by_watch.setdefault(w.name, (w, []))[1].append(q)
+
+    lines = ["📊 <b>持平</b> <i>(已通知過, 本輪未再降價)</i>"]
+    for name in sorted(by_watch):
+        w, qs = by_watch[name]
+        if w.adults > 1:
+            cheapest = min(qs, key=lambda q: q.price_per_person)
+            price_html = f"<b>{w.currency} {cheapest.price_per_person:,.0f}/人</b>"
+        else:
+            cheapest = min(qs, key=lambda q: q.price)
+            price_html = f"<b>{w.currency} {cheapest.price:,.0f}</b>"
+        suffix = f" 起 (共 {len(qs)} 筆)" if len(qs) > 1 else ""
+        lines.append(f"• {name}: {price_html}{suffix}")
     return "\n".join(lines)
 
 
@@ -326,6 +363,7 @@ def _format_changes(
     new_hits: list[tuple[Watch, FlightQuote]],
     drop_hits: list[tuple[Watch, FlightQuote, float]],
     gone: list[_GoneEntry],
+    unchanged_hits: list[tuple[Watch, FlightQuote]],
     history: dict,
     marker: str,
 ) -> list[str]:
@@ -351,6 +389,8 @@ def _format_changes(
 
     if gone:
         parts.append(_format_gone_section(gone))
+    if unchanged_hits:
+        parts.append(_format_unchanged_section(unchanged_hits))
 
     return parts
 
@@ -385,12 +425,16 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
             failed.append(watch.name)
             all_hits.append((watch, []))
 
-    new_hits, drop_hits, gone = _classify(state, all_hits)
+    new_hits, drop_hits, gone, unchanged_hits = _classify(state, all_hits)
     print(
         f"summary: {len(new_hits)} new, {len(drop_hits)} drop, "
-        f"{len(gone)} gone, {len(failed)} failed"
+        f"{len(gone)} gone, {len(unchanged_hits)} unchanged, "
+        f"{len(failed)} failed"
     )
 
+    # unchanged_hits alone do NOT trigger a notification — that would re-spam
+    # the same prices every scan. They only ride along when something else
+    # already requires a message.
     has_changes = bool(new_hits or drop_hits or gone)
     if not has_changes and not failed:
         print("no changes vs last scan; skipping Telegram notification")
@@ -402,9 +446,11 @@ def run(cfg: AppConfig, dry_run: bool = False, verbose: bool = False) -> None:
             history_mod.save_history(history)
         return
 
-    header = _build_header(cfg, all_hits, failed, new_hits, drop_hits, gone)
+    header = _build_header(
+        cfg, all_hits, failed, new_hits, drop_hits, gone, unchanged_hits
+    )
     body_parts = _format_changes(
-        new_hits, drop_hits, gone, history, cfg.travelpayouts_marker
+        new_hits, drop_hits, gone, unchanged_hits, history, cfg.travelpayouts_marker
     )
 
     sep = "\n\n━━━━━━━━━━━━━━━\n\n"
