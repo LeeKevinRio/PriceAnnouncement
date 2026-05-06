@@ -25,6 +25,7 @@ Commands (see /help for full list):
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import requests
@@ -43,11 +44,18 @@ _API = "https://api.telegram.org/bot{token}/{method}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def get_updates(token: str, offset: int = 0) -> list[dict]:
+def get_updates(token: str, offset: int = 0, long_poll: int = 0) -> list[dict]:
+    """Fetch new updates from Telegram.
+
+    long_poll=0 → short-poll (returns immediately).
+    long_poll=N → Telegram holds the connection up to N seconds waiting for
+    a new update; HTTP timeout adds a margin so the request doesn't time
+    out before Telegram replies.
+    """
     r = requests.get(
         _API.format(token=token, method="getUpdates"),
-        params={"offset": offset, "timeout": 0},
-        timeout=15,
+        params={"offset": offset, "timeout": long_poll},
+        timeout=long_poll + 15,
     )
     r.raise_for_status()
     payload = r.json()
@@ -322,7 +330,7 @@ def handle(text: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def poll_once() -> int:
+def poll_once(long_poll: int = 0) -> int:
     """One round of getUpdates → process → save offset.
     Returns number of messages handled (for logging)."""
     load_dotenv()
@@ -333,7 +341,7 @@ def poll_once() -> int:
         return 0
 
     offset = load_offset()
-    updates = get_updates(token, offset + 1 if offset else 0)
+    updates = get_updates(token, offset + 1 if offset else 0, long_poll=long_poll)
     if not updates:
         return 0
 
@@ -363,8 +371,50 @@ def poll_once() -> int:
     return handled
 
 
+def poll_loop(duration_sec: int, long_poll: int = 50) -> None:
+    """Run Telegram long-poll continuously for `duration_sec`.
+
+    GitHub Actions schedule cron is unreliable at the */5 minute level — under
+    load, runs are delayed 30–80 minutes — so a single short-poll per run gives
+    users multi-minute response latency on /list etc. Instead, we hold the
+    workflow run open for ~50 minutes long-polling Telegram. While a run is
+    active, command latency drops to ~30–60s. The bot-poll workflow uses
+    `concurrency: bot-poll` with `cancel-in-progress: false`, so subsequent
+    cron triggers queue and seamlessly take over when the current run ends —
+    yielding near-continuous coverage.
+
+    Exit early when the watchlist file is modified or `.scan_requested` is
+    written, so the surrounding workflow can immediately git push the new
+    watchlist / dispatch the scan workflow rather than waiting up to 50
+    minutes for the loop to finish.
+    """
+    deadline = time.time() + duration_sec
+    initial_watchlist = _WATCHLIST.read_bytes() if _WATCHLIST.exists() else b""
+
+    while time.time() < deadline:
+        try:
+            poll_once(long_poll=long_poll)
+        except Exception as exc:
+            # Network blips / Telegram 5xx: log and back off briefly so we
+            # don't tight-loop on a persistent error.
+            print(f"bot: poll error: {exc}")
+            time.sleep(5)
+            continue
+
+        if (_ROOT / ".scan_requested").exists():
+            print("bot: /scan requested → exiting loop so workflow can dispatch")
+            return
+        if _WATCHLIST.exists() and _WATCHLIST.read_bytes() != initial_watchlist:
+            print("bot: watchlist changed → exiting loop so workflow can commit + push")
+            return
+
+
 if __name__ == "__main__":
-    poll_once()
+    # Defaults sized for a 55-minute workflow timeout (see bot-poll.yml).
+    poll_loop(
+        duration_sec=int(os.environ.get("POLL_DURATION_SEC", 50 * 60)),
+        long_poll=int(os.environ.get("POLL_LONG_POLL_SEC", 50)),
+    )
     # Exit code 0 always; let caller workflow inspect git diff to decide
     # whether to commit/push the watchlist.
     sys.exit(0)
