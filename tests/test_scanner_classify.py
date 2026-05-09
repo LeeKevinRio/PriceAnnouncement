@@ -90,19 +90,22 @@ class UnchangedSectionTests(unittest.TestCase):
 
         out = _format_unchanged_section([(watch, q1), (watch, q2)])
 
-        # Cheapest per-person was 14000/2 = 7000
+        # Cheapest per-person was 14000/2 = 7000, on the 06-01 → 06-05 window
         self.assertIn("東京", out)
         self.assertIn("7,000/人", out)
         self.assertIn("共 2 筆", out)
+        self.assertIn("2026-06-01 → 2026-06-05", out)
+        self.assertNotIn("2026-06-08", out)
 
     def test_single_hit_omits_count_suffix(self):
         watch = _watch(name="沖繩")
-        q = _quote(price=14000)
+        q = _quote(price=14000, depart="2026-07-10", ret="2026-07-14")
 
         out = _format_unchanged_section([(watch, q)])
 
         self.assertIn("沖繩", out)
         self.assertNotIn("共 1 筆", out)
+        self.assertIn("2026-07-10 → 2026-07-14", out)
 
 
 class FormatChangesIntegrationTests(unittest.TestCase):

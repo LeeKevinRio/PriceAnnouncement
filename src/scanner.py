@@ -339,8 +339,9 @@ def _format_unchanged_section(
         else:
             cheapest = min(qs, key=lambda q: q.price)
             price_html = f"<b>{w.currency} {cheapest.price:,.0f}</b>"
+        date_str = f"{cheapest.depart_date} → {cheapest.return_date}"
         suffix = f" 起 (共 {len(qs)} 筆)" if len(qs) > 1 else ""
-        lines.append(f"• {name}: {price_html}{suffix}")
+        lines.append(f"• {name}: {date_str}  {price_html}{suffix}")
     return "\n".join(lines)
 
 
